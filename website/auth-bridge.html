@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Sign in · Maatram</title>
+<style>
+  :root{ --green:#2fe38f; --blue:#37b6ff; --bg:#06090B; --ink:#e8f4ef; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);display:grid;place-items:center;padding:24px;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif}
+  .card{width:100%;max-width:420px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);
+        border-radius:22px;padding:28px 22px;text-align:center;backdrop-filter:blur(18px)}
+  .mark{width:56px;height:56px;margin:0 auto 14px;border-radius:16px;display:grid;place-items:center;
+        font-weight:800;font-size:26px;color:#04120F;background:linear-gradient(135deg,var(--green),var(--blue))}
+  h1{font-size:20px;margin:0 0 6px;letter-spacing:.02em}
+  p{font-size:14px;line-height:1.5;opacity:.78;margin:0 0 18px}
+  button{width:100%;min-height:52px;border-radius:14px;border:0;font:inherit;font-weight:700;font-size:15.5px;
+         cursor:pointer;margin-top:10px}
+  .primary{background:#fff;color:#111}
+  .ghost{background:rgba(255,255,255,.08);color:var(--ink);border:1px solid rgba(255,255,255,.2)}
+  #msg{font-size:13.5px;margin-top:14px;min-height:20px}
+  .err{color:#ff8b8b}
+  .ok{color:var(--green)}
+  textarea{width:100%;margin-top:12px;font-size:13px;padding:10px;border-radius:12px;
+           border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:inherit;
+           word-break:break-all}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="mark">M</div>
+  <h1>Sign in to Maatram</h1>
+  <p id="lead">Finish with Google here, then you'll be sent straight back to the app.</p>
+
+  <button id="go" class="primary">Continue with Google</button>
+
+  <div id="back" class="hide">
+    <button id="ret" class="primary">Return to Maatram</button>
+    <button id="copy" class="ghost">Copy code instead</button>
+    <textarea id="tok" rows="3" readonly class="hide"></textarea>
+  </div>
+
+  <div id="msg"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+         getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const $  = id => document.getElementById(id);
+const msg = (t, cls='') => { $('msg').className = cls; $('msg').textContent = t; };
+
+const app  = initializeApp({
+  apiKey: "AIzaSyAjiAm61IkH3wB1tjwOyGRrXAuRMKQyCcQ",
+  authDomain: "maatram-859f4.firebaseapp.com",
+  projectId: "maatram-859f4",
+  storageBucket: "maatram-859f4.firebasestorage.app",
+  messagingSenderId: "770970784123",
+  appId: "1:770970784123:web:7c73c74ddb2179b69dedde"
+});
+const auth = getAuth(app);
+
+/* Where to send the token back to. Kept in sessionStorage so it survives the
+   redirect fallback. */
+const qs = new URLSearchParams(location.search);
+const RT = qs.get('rt') || sessionStorage.getItem('mt_rt') || 'maatram://auth';
+sessionStorage.setItem('mt_rt', RT);
+
+function handOff(idToken){
+  $('go').classList.add('hide');
+  $('back').classList.remove('hide');
+  $('lead').textContent = 'Signed in. Sending you back to Maatram…';
+  msg('If the app does not open, tap Return to Maatram.', 'ok');
+
+  const deep = RT + '?idt=' + encodeURIComponent(idToken);
+  $('ret').onclick  = () => { location.href = deep; };
+  $('copy').onclick = async () => {
+    $('tok').classList.remove('hide');
+    $('tok').value = idToken;
+    try { await navigator.clipboard.writeText(idToken); msg('Code copied. Paste it in the app.', 'ok'); }
+    catch(e){ $('tok').select(); msg('Select the code above and copy it.', ''); }
+  };
+  /* Auto-attempt once; browsers may require the tap, hence the button. */
+  setTimeout(() => { try { location.href = deep; } catch(e){} }, 400);
+}
+
+function tokenFrom(result){
+  const cred = GoogleAuthProvider.credentialFromResult(result);
+  return cred && cred.idToken ? cred.idToken : null;
+}
+
+async function run(){
+  try {
+    const r = await getRedirectResult(auth);
+    const t = r && tokenFrom(r);
+    if (t) { handOff(t); return; }
+  } catch(e){ console.warn(e); }
+
+  $('go').onclick = async () => {
+    $('go').disabled = true; msg('Opening Google…');
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      const res = await signInWithPopup(auth, provider);
+      const t = tokenFrom(res);
+      if (t) { handOff(t); return; }
+      msg('Google did not return a token. Try again.', 'err');
+    } catch(e){
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment'
+                || e.code === 'auth/cancelled-popup-request')) {
+        try { await signInWithRedirect(auth, provider); return; } catch(e2){ e = e2; }
+      }
+      msg('Sign-in failed: ' + (e.code || e.message), 'err');
+    }
+    $('go').disabled = false;
+  };
+}
+run();
+
+/* Don't leave a stray browser session lying around after hand-off. */
+addEventListener('pagehide', () => { try { signOut(auth); } catch(e){} });
+</script>
+</body>
+</html>

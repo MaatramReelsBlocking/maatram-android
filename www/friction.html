@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Maatram — Friction Gate</title>
+<style>
+/* ═══ Friction Gate — native-only screen, must work fully OFFLINE (no CDN) ═══ */
+:root{
+  --bg:#04120f; --ink:#eafff5; --dim:#9ec7b5;
+  --green:#2fe38f; --blue:#37b6ff; --red:#ff5d73; --amber:#ffd166;
+  --card:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow-x:clip}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;
+  display:flex; flex-direction:column; align-items:center;
+  padding:calc(env(safe-area-inset-top,0px) + 22px) 18px calc(env(safe-area-inset-bottom,0px) + 18px);
+  overflow-y:auto; user-select:none;
+}
+/* breathing aurora — pure CSS, cheap */
+body::before{content:'';position:fixed;inset:-30%;z-index:-1;
+  background:
+    radial-gradient(40% 34% at 30% 20%, rgba(47,227,143,.13), transparent 70%),
+    radial-gradient(38% 30% at 75% 70%, rgba(55,182,255,.11), transparent 70%);
+  animation:drift 14s ease-in-out infinite alternate;}
+@keyframes drift{from{transform:translate(-2%,-2%) scale(1)}to{transform:translate(2%,3%) scale(1.06)}}
+@media(prefers-reduced-motion:reduce){body::before{animation:none}}
+
+.wrap{width:100%;max-width:430px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:2px}
+.mk{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--blue));
+    display:grid;place-items:center;font-weight:800;color:#04120f;font-size:15px}
+.brand b{letter-spacing:3px;font-size:13px}
+h1{font-size:21px;text-align:center;line-height:1.3;font-weight:800}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue));
+      -webkit-background-clip:text;background-clip:text;color:transparent}
+.usage{text-align:center;font-size:13px;color:var(--dim)}
+.usage b{color:var(--amber)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.card h3{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);margin-bottom:9px}
+
+/* regret receipt */
+#regret .row{display:flex;gap:8px;margin-top:8px}
+#regret button{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(255,255,255,.05);color:var(--ink);font-size:14px;font-weight:700}
+#regret .hist{margin-top:8px;font-size:12px;color:var(--dim)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;padding:0 15px;border-radius:100px;border:1px solid var(--line);
+  background:rgba(255,255,255,.04);color:var(--ink);font-size:13px;font-weight:600;
+  display:inline-flex;align-items:center}
+.chip.on{background:linear-gradient(90deg,rgba(47,227,143,.22),rgba(55,182,255,.22));
+  border-color:rgba(47,227,143,.55);color:#fff}
+
+/* toll */
+.toll{display:flex;align-items:baseline;justify-content:space-between}
+.toll .amt{font-size:26px;font-weight:800;color:var(--red)}
+.toll .tier{font-size:12px;color:var(--dim)}
+.toll.broke .amt{color:#777}
+#brokeMsg{display:none;margin-top:8px;font-size:12px;color:var(--red)}
+
+/* dwell ring */
+.ringzone{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 2px}
+.rw{position:relative;width:min(52vw,190px);height:min(52vw,190px)}
+.rw svg{width:100%;height:100%;transform:rotate(-90deg)}
+.rbg{fill:none;stroke:rgba(255,255,255,.08);stroke-width:9}
+.rfg{fill:none;stroke:url(#gg);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .95s linear}
+.rnum{position:absolute;inset:0;display:grid;place-items:center;font-size:34px;font-weight:800}
+.rsub{font-size:12px;color:var(--dim);text-align:center;min-height:16px}
+.hold-note{font-size:12px;color:var(--amber);text-align:center;min-height:16px}
+
+.actions{display:flex;flex-direction:column;gap:9px;margin-top:2px}
+#enterBtn{min-height:54px;border-radius:14px;border:none;font-size:15px;font-weight:800;
+  letter-spacing:.6px;color:#04120f;background:linear-gradient(90deg,var(--green),var(--blue));opacity:.35}
+#enterBtn.ready{opacity:1}
+#leaveBtn{min-height:50px;border-radius:14px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font-size:14px;font-weight:700}
+.fine{font-size:11px;color:var(--dim);text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="mk">M</span><b>MAATRAM · FRICTION GATE</b></div>
+  <h1>Hold on — you're opening <em id="appName">this app</em></h1>
+  <div class="usage" id="usageLine"></div>
+
+  <!-- regret receipt for the LAST session -->
+  <div class="card" id="regret" style="display:none">
+    <h3>Your last visit</h3>
+    <div id="regretQ" style="font-size:14px"></div>
+    <div class="row">
+      <button id="rgYes">👍 Worth it</button>
+      <button id="rgNo">👎 Not worth it</button>
+    </div>
+    <div class="hist" id="regretHist"></div>
+  </div>
+
+  <div class="card">
+    <h3>Why are you opening it?</h3>
+    <div class="chips" id="whyChips">
+      <button class="chip" data-why="Reply to someone">💬 Reply</button>
+      <button class="chip" data-why="Post something">📤 Post</button>
+      <button class="chip" data-why="Search something">🔎 Search</button>
+      <button class="chip" data-why="Just checking">👀 Just checking</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>For how long?</h3>
+    <div class="chips" id="minChips">
+      <button class="chip" data-min="2">2 min</button>
+      <button class="chip on" data-min="5">5 min</button>
+      <button class="chip" data-min="10">10 min</button>
+    </div>
+    <div class="fine" style="text-align:left;margin-top:8px">When your time is up, Maatram sends you back home automatically.</div>
+  </div>
+
+  <div class="card">
+    <h3>Entry toll</h3>
+    <div class="toll" id="tollBox">
+      <span class="amt" id="tollAmt">−5 PTS</span>
+      <span class="tier" id="tollTier">1st open today</span>
+    </div>
+    <div id="brokeMsg">Not enough PTS for this entry. Earn points with Timers, Hard Lock or a Study Room first.</div>
+  </div>
+
+  <div class="ringzone">
+    <div class="rw">
+      <svg viewBox="0 0 120 120">
+        <defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#2fe38f"/><stop offset="100%" stop-color="#37b6ff"/>
+        </linearGradient></defs>
+        <circle class="rbg" cx="60" cy="60" r="52"/>
+        <circle class="rfg" id="rfg" cx="60" cy="60" r="52"/>
+      </svg>
+      <div class="rnum" id="rnum">8</div>
+    </div>
+    <div class="rsub" id="rsub">Breathe. The gate opens when the ring closes.</div>
+    <div class="hold-note" id="holdNote"></div>
+  </div>
+
+  <div class="actions">
+    <button id="enterBtn" disabled>Pay toll &amp; enter</button>
+    <button id="leaveBtn">Never mind — take me home</button>
+  </div>
+  <div class="fine">The toll rises with every open today (−5 → −15 → −30 → −50).<br>The wait doubles when you come back within the hour.</div>
+</div>
+
+<script>
+/* ════════ Friction Gate logic (native) ════════
+   All state comes from the Java bridge `MaatramGate`:
+     getState()            -> JSON string
+     approve(min, toll, why)
+     deny()
+     regret(worthItBool)
+   No network, no Firebase, no fonts — this page must work in airplane mode. */
+(function(){
+  'use strict';
+  var B = window.MaatramGate || null;
+
+  /* dev fallback so the page can be previewed in a desktop browser */
+  var st = { app:'Instagram', usageMin:23, opensToday:1, toll:15, tier:2,
+             dwellSec:8, points:120, pendingRegret:null, verdicts:[] };
+  if(B){
+    try{ st = JSON.parse(B.getState()); }catch(e){ /* keep fallback */ }
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  $('appName').textContent = st.app || 'this app';
+  $('usageLine').innerHTML = (st.usageMin>0 ? 'You\u2019ve already spent <b>'+st.usageMin+' min</b> here today · ' : '')
+                           + (st.opensToday>0 ? 'open #'+(st.opensToday+1)+' today' : 'first open today');
+
+  /* ── regret receipt ── */
+  if(st.pendingRegret && st.pendingRegret.app){
+    $('regret').style.display='';
+    $('regretQ').textContent = 'Was your last '+st.pendingRegret.app+' session worth it?';
+    var done=function(w){
+      try{ B && B.regret(!!w); }catch(e){}
+      $('regret').style.opacity=.45;
+      $('rgYes').disabled=$('rgNo').disabled=true;
+      $('regretQ').textContent = w ? 'Logged: worth it \u2713' : 'Logged: not worth it \u2713';
+    };
+    $('rgYes').onclick=function(){done(true)};
+    $('rgNo').onclick =function(){done(false)};
+  }
+  if(st.verdicts && st.verdicts.length){
+    var bad=0; for(var i=0;i<st.verdicts.length;i++) if(!st.verdicts[i].worth) bad++;
+    $('regretHist').textContent = bad>0
+      ? 'Your own verdict: '+bad+' of your last '+st.verdicts.length+' opens were NOT worth it.'
+      : 'Your last '+st.verdicts.length+' opens: all worth it.';
+    if(bad>0){ $('regret').style.display=''; }
+  }
+
+  /* ── toll ── */
+  var TIER_NAMES=['1st open today','2nd open today','3rd open today','4th+ open today'];
+  var broke = (typeof st.points==='number') && st.points < st.toll;
+  $('tollAmt').textContent='\u2212'+st.toll+' PTS';
+  $('tollTier').textContent=TIER_NAMES[Math.min(st.tier-1,3)]||'today';
+  if(broke){ $('tollBox').classList.add('broke'); $('brokeMsg').style.display=''; }
+
+  /* ── chips ── */
+  var why=null, mins=5;
+  function chipify(box,cb){
+    box.addEventListener('click',function(e){
+      var c=e.target.closest('.chip'); if(!c) return;
+      var all=box.querySelectorAll('.chip');
+      for(var i=0;i<all.length;i++) all[i].classList.remove('on');
+      c.classList.add('on'); cb(c);
+    });
+  }
+  chipify($('whyChips'),function(c){ why=c.getAttribute('data-why'); refresh(); });
+  chipify($('minChips'),function(c){ mins=+c.getAttribute('data-min'); });
+
+  /* ── adaptive dwell ring (+ peer holds arrive via native callback) ── */
+  var dwell=Math.max(3, st.dwellSec|0), left=dwell, doneDwell=false;
+  var CIRC=2*Math.PI*52, rfg=$('rfg');
+  rfg.style.strokeDasharray=CIRC;
+  function paint(){
+    rfg.style.strokeDashoffset=CIRC*(left/dwell);
+    $('rnum').textContent=left;
+  }
+  paint();
+  var tick=setInterval(function(){
+    left--;
+    if(left<=0){ left=0; doneDwell=true; clearInterval(tick);
+      $('rnum').textContent='\u2713';
+      rfg.style.strokeDashoffset=0;
+      $('rsub').textContent='Gate unlocked \u2014 your call now.';
+      refresh(); return;
+    }
+    paint();
+  },1000);
+
+  /* Java can push extra dwell (peer Hold from a Study Room, future use) */
+  window.maatramAddDwell=function(sec,byName){
+    if(doneDwell) return;
+    sec=Math.max(0,sec|0); dwell+=sec; left+=sec; paint();
+    $('holdNote').textContent='\u270b '+(byName||'A friend')+' asked you to hold on \u2014 +'+sec+'s';
+  };
+
+  /* ── buttons ── */
+  var enter=$('enterBtn');
+  function refresh(){
+    var ok = doneDwell && !!why && !broke;
+    enter.disabled=!ok;
+    enter.classList.toggle('ready',ok);
+    if(doneDwell && !why) $('rsub').textContent='Pick a reason above to continue.';
+  }
+  refresh();
+
+  enter.addEventListener('click',function(){
+    if(enter.disabled) return;
+    enter.disabled=true; enter.textContent='Opening\u2026';
+    try{ B ? B.approve(mins, st.toll, why||'') : alert('approve('+mins+','+st.toll+','+why+')'); }
+    catch(e){ enter.textContent='Error \u2014 try again'; enter.disabled=false; }
+  });
+  $('leaveBtn').addEventListener('click',function(){
+    try{ B ? B.deny() : alert('deny()'); }catch(e){}
+  });
+})();
+</script>
+</body>
+</html>

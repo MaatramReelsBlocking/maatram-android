@@ -1,0 +1,43 @@
+MAATRAM v10 - Google sign-in fix (Android)
+==========================================
+
+WHAT WAS BROKEN
+Tapping "Continue with Google" in the app opened Google in Chrome, you picked
+your account, and then you got a white page. Google refuses to run its account
+chooser inside an app's WebView, so signInWithPopup() escaped into Chrome - and
+Chrome had no way to hand the signed-in account back to the app. Nothing was
+wrong with your Firebase project.
+
+HOW v10 FIXES IT
+  app     -> opens  maatram-website.vercel.app/auth-bridge.html  in Chrome
+  Chrome  -> you pick your Google account (works normally there)
+  page    -> bounces back into the app via  maatram://auth?idt=<token>
+  app     -> turns that token into a real Firebase session (signInWithCredential)
+
+If the bounce-back is blocked, the page shows "Copy code" and the app's login
+screen shows a paste box - same result, one extra tap.
+
+YOU MUST DO TWO THINGS
+  1. Put website/auth-bridge.html on the Maatram website.
+     - github.com/MaatramReelsBlocking/Maatram-  ->  Add file  ->  Upload files
+     - drop auth-bridge.html in the repo ROOT (next to index.html), commit.
+     - Vercel auto-deploys. Check it loads:
+       https://maatram-website.vercel.app/auth-bridge.html
+     Without this file the app has nowhere to send you and sign-in still fails.
+
+  2. Unzip this into an EMPTY folder, open android/ in Android Studio, Run.
+     (Uninstall the old Maatram from the phone first - signature/state clashes.)
+
+Nothing to change in the Firebase or Google Cloud console. No SHA-1, no
+google-services.json.
+
+WHAT CHANGED (files)
+  android/app/src/main/AndroidManifest.xml    + maatram://auth intent-filter
+  .../java/com/maatram/app/MainActivity.java  + onNewIntent, parks the token
+  .../java/com/maatram/app/AppBlockerPlugin.java  + openUrl(), consumeAuthToken()
+  www/native.js                               + window.MaatramAuth (whole flow)
+  www/login.html                              + native branch + paste-code box
+  website/auth-bridge.html                    NEW - goes on the website, not the app
+  android/app/src/main/assets/public/*        re-synced (build needs no Node)
+
+Everything else - Shield, friction gate, points, pages - is untouched.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#06090B</color>
+    <color name="colorPrimaryDark">#04120F</color>
+    <color name="colorAccent">#2FE38F</color>
+    <color name="maatramBg">#06090B</color>
+    <color name="maatram_icon_bg">#04120F</color>
+</resources>

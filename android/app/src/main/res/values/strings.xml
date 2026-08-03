@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Maatram</string>
+    <string name="title_activity_main">Maatram</string>
+    <string name="package_name">com.maatram.app</string>
+    <string name="custom_url_scheme">com.maatram.app</string>
+    <string name="blocker_service_desc">Maatram Shield blocks social media apps (Instagram, TikTok, Snapchat, YouTube, Facebook, X, Reddit — and WhatsApp unless you unlock it) while a Hard Lock focus session is running. It only reads which app is in front. It never reads screen content, passwords or messages.</string>
+</resources>
