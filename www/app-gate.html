@@ -1348,6 +1348,48 @@ if(!reduced) requestAnimationFrame(frame); else frame(0);
     AB.setFrictionEnabled({on:frOn}).then(function(){frPaint(frOn);}, fail('setFrictionEnabled'));
   });
 
+  /* ══ Daily limits: per-app minutes/day, enforced natively by the Shield ══ */
+  var LIM_APPS=['Instagram','YouTube','TikTok','Snapchat','Facebook','X','Reddit','Threads'];
+  var LIM_OPTS=[0,15,30,45,60,90,120];
+  var limBox=document.createElement('div');
+  limBox.style.cssText='margin-top:12px;max-width:320px;width:100%;text-align:left;font-size:12px;'
+    +'border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);border-radius:12px;padding:11px 13px';
+  limBox.innerHTML='<b style="letter-spacing:.6px">⏳ DAILY LIMITS</b>'
+    +'<div style="opacity:.7;margin:4px 0 8px">When an app\'s time is used up it stays closed until midnight. A used-up limit can\'t be raised today.</div>'
+    +LIM_APPS.map(function(a){
+      return '<label style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px">'
+        +'<span>'+a+' <span data-used="'+a+'" style="opacity:.6"></span></span>'
+        +'<select data-app="'+a+'" style="min-height:40px;border-radius:10px;background:#0b1a16;color:#eafff5;border:1px solid rgba(255,255,255,.15);padding:0 8px">'
+        +LIM_OPTS.map(function(m){return '<option value="'+m+'">'+(m?m+' min/day':'No limit')+'</option>';}).join('')
+        +'</select></label>';
+    }).join('')
+    +'<div id="limMsg" style="color:#ff9aa8;min-height:14px"></div>';
+  if(frBtn.parentNode) frBtn.parentNode.insertBefore(limBox, frBtn.nextSibling);
+  var limSel=limBox.querySelectorAll('select');
+  function limPaint(r){
+    var lim={}, used={};
+    try{ lim=JSON.parse(r.limits||'{}'); used=JSON.parse(r.usedMin||'{}'); }catch(_){}
+    for(var i=0;i<limSel.length;i++){
+      var a=limSel[i].getAttribute('data-app'), m=lim[a]||0;
+      if(LIM_OPTS.indexOf(m)<0){ var o=document.createElement('option'); o.value=m; o.textContent=m+' min/day'; limSel[i].appendChild(o); }
+      limSel[i].value=String(m);
+      limBox.querySelector('[data-used="'+a+'"]').textContent=used[a]?'· '+used[a]+' min today':'';
+    }
+  }
+  function limLoad(){ AB.getLimits().then(limPaint, fail('getLimits')); }
+  limBox.addEventListener('change',function(){
+    var want={};
+    for(var i=0;i<limSel.length;i++) want[limSel[i].getAttribute('data-app')]=+limSel[i].value;
+    AB.setLimits({limits:JSON.stringify(want)}).then(function(r){
+      var got={}; try{ got=JSON.parse(r.limits||'{}'); }catch(_){}
+      var kept=Object.keys(got).filter(function(a){ return (want[a]||0)!==got[a]; });
+      document.getElementById('limMsg').textContent=kept.length?kept.join(', ')+': limit already used up today, kept as is.':'';
+      limLoad();
+    }, fail('setLimits'));
+  });
+  limLoad();
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) limLoad(); });
+
   /* keep the native side's PTS cache honest ("broke" check on the gate) */
   function pushPoints(){
     var pts=parseInt(store.get('maatram_points'),10);

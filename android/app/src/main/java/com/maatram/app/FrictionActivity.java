@@ -137,6 +137,8 @@ public class FrictionActivity extends Activity {
                 out.put("tier", Math.min(opens + 1, 4));
                 out.put("toll", AppBlockerService.tollFor(opens));
                 out.put("dwellSec", AppBlockerService.dwellSecNow(p));
+                out.put("limitMin", AppBlockerService.limits(p).optInt(AppBlockerService.labelFor(pkg), 0));
+                out.put("labelMin", AppBlockerService.usageByLabel(p).optLong(AppBlockerService.labelFor(pkg), 0L) / 60000L);
                 long pts = p.getLong(AppBlockerService.KEY_POINTS_CACHE, -1L);
                 if (pts >= 0) out.put("points", pts);
 

@@ -165,6 +165,57 @@ public class AppBlockerPlugin extends Plugin {
         call.resolve(out);
     }
 
+    /* ============== Daily limits ============== */
+
+    /** {limits: {label: min}, usedMin: {label: min}} as JSON strings. */
+    @PluginMethod
+    public void getLimits(PluginCall call) {
+        SharedPreferences p = prefs();
+        JSONObject used = AppBlockerService.usageByLabel(p);
+        JSONObject usedMin = new JSONObject();
+        java.util.Iterator<String> it = used.keys();
+        try {
+            while (it.hasNext()) { String l = it.next(); usedMin.put(l, used.optLong(l) / 60000L); }
+        } catch (Exception ignored) { }
+        JSObject out = new JSObject();
+        out.put("limits", AppBlockerService.limits(p).toString());
+        out.put("usedMin", usedMin.toString());
+        call.resolve(out);
+    }
+
+    /** limits: JSON string {label: min}, 0 = no limit. A limit already used up
+     *  today can't be raised or removed until tomorrow (no cheating). */
+    @PluginMethod
+    public void setLimits(PluginCall call) {
+        SharedPreferences p = prefs();
+        JSONObject want;
+        try { want = new JSONObject(call.getString("limits", "{}")); }
+        catch (Exception e) { call.reject("limits must be a JSON object string"); return; }
+        JSONObject old = AppBlockerService.limits(p);
+        JSONObject used = AppBlockerService.usageByLabel(p);
+        JSONObject next = new JSONObject();
+        try {
+            java.util.Iterator<String> it = want.keys();
+            while (it.hasNext()) {
+                String l = it.next();
+                int m = Math.max(0, Math.min(want.optInt(l, 0), 24 * 60));
+                if (m > 0) next.put(l, m);
+            }
+            it = old.keys();
+            while (it.hasNext()) {
+                String l = it.next();
+                int o = old.optInt(l, 0);
+                boolean usedUp = o > 0 && used.optLong(l, 0L) >= o * 60000L;
+                int n = next.optInt(l, 0);
+                if (usedUp && (n == 0 || n > o)) next.put(l, o);
+            }
+        } catch (Exception e) { call.reject("bad limits"); return; }
+        p.edit().putString(AppBlockerService.KEY_LIMITS, next.toString()).commit();
+        JSObject out = new JSObject();
+        out.put("limits", next.toString());
+        call.resolve(out);
+    }
+
     /* ============== Google sign-in helpers (v10) ============== */
 
     /** Opens a URL in the real browser. Google blocks its account chooser

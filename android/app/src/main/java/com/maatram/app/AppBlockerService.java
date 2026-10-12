@@ -40,6 +40,8 @@ import java.util.Map;
  *     the app every 10 minutes: "Instagram - 10 min today". Works even when
  *     no lock and no friction is active. Uses TYPE_ACCESSIBILITY_OVERLAY, so
  *     no extra permission is needed.
+ *  4. DAILY LIMITS: once an app's minutes for today are used up it is
+ *     bounced HOME until midnight, friction or not.
  */
 public class AppBlockerService extends AccessibilityService {
 
@@ -54,6 +56,7 @@ public class AppBlockerService extends AccessibilityService {
     public static final String KEY_PEND_EVENTS = "pend_events";    // JSON [...] drained by app
     public static final String KEY_LAST_SESS = "last_sess";        // JSON {app,pkg,ts} awaiting verdict
     public static final String KEY_VERDICTS = "verdicts";          // JSON [{app,worth,ts}] last 5
+    public static final String KEY_LIMITS = "limits";              // JSON {label: minutes/day}
     private static final String KEY_SESS_PREFIX = "sess_";         // sess_<pkg> = end ms
     private static final String KEY_SESS_APP_PREFIX = "sessapp_";  // sessapp_<pkg> = label
 
@@ -155,6 +158,30 @@ public class AppBlockerService extends AccessibilityService {
         JSONObject o = jsonPref(p, key);
         try { o.put(pkg, o.optLong(pkg, 0L) + ms); } catch (Exception ignored) { }
         p.edit().putString(key, o.toString()).apply();
+    }
+
+    /** Today's ms per app label (Instagram + Instagram Lite count as one). */
+    public static JSONObject usageByLabel(SharedPreferences p) {
+        JSONObject by = new JSONObject();
+        JSONObject u = usageToday(p);
+        Iterator<String> it = u.keys();
+        while (it.hasNext()) {
+            String pkg = it.next();
+            String l = labelFor(pkg);
+            try { by.put(l, by.optLong(l, 0L) + u.optLong(pkg, 0L)); } catch (Exception ignored) { }
+        }
+        return by;
+    }
+
+    public static JSONObject limits(SharedPreferences p) {
+        return jsonPref(p, KEY_LIMITS);
+    }
+
+    /** Daily limit set for pkg's label and already used up today. */
+    public static boolean overLimit(SharedPreferences p, String pkg) {
+        String l = labelFor(pkg);
+        int lim = limits(p).optInt(l, 0);
+        return lim > 0 && usageByLabel(p).optLong(l, 0L) >= lim * 60000L;
     }
 
     /** Approved gate entries into pkg today. */
@@ -356,8 +383,17 @@ public class AppBlockerService extends AccessibilityService {
             return;
         }
 
-        /* -- 2. FRICTION GATE: no lock, blocked app, no live session -- */
-        if (!isBlocked(pkg)) return;                          // WhatsApp is never gated
+        if (!isBlocked(pkg)) return;                          // WhatsApp is never gated or limited
+
+        /* -- 2. DAILY LIMIT: used up = home until midnight, beats sessions -- */
+        if (overLimit(p, pkg)) {
+            lastBlocked = pkg;
+            bounceHome();
+            limitToast(p, pkg, now);
+            return;
+        }
+
+        /* -- 3. FRICTION GATE: no lock, no live session -- */
         if (!p.getBoolean(KEY_FRICTION_ON, true)) return;
         long sEnd = sessionEnd(p, pkg);
         if (now < sEnd) {
@@ -440,6 +476,12 @@ public class AppBlockerService extends AccessibilityService {
                     showReminder(labelFor(fgPkg) + " - " + threshold + " min today");
                 }
             }
+
+            /* limit ran out mid-scroll */
+            if (now >= p.getLong(KEY_LOCK_END, 0L) && overLimit(p, fgPkg)) {
+                bounceHome();
+                limitToast(p, fgPkg, now);
+            }
         }
 
         /* expire any finished sessions */
@@ -475,6 +517,13 @@ public class AppBlockerService extends AccessibilityService {
                 Log.w(TAG, "home intent failed", e);
             }
         }
+    }
+
+    private void limitToast(SharedPreferences p, String pkg, long now) {
+        if (now - lastToast < 2500) return;
+        lastToast = now;
+        String l = labelFor(pkg);
+        toast(l + ": daily limit (" + limits(p).optInt(l, 0) + " min) used up - back tomorrow");
     }
 
     private void toast(final String msg) {

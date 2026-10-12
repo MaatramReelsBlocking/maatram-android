@@ -71,6 +71,18 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
 .rfg{fill:none;stroke:url(#gg);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .95s linear}
 .rnum{position:absolute;inset:0;display:grid;place-items:center;font-size:34px;font-weight:800}
 .rsub{font-size:12px;color:var(--dim);text-align:center;min-height:16px}
+/* breathing: ring swells 4s in, 4s out */
+.rw.breathe{animation:breathe 8s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(.84)}50%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.rw.breathe{animation:none}}
+.rsub{font-size:14px;font-weight:700;color:var(--ink)}
+
+/* challenge */
+#chQ{font-size:15px;font-weight:700;margin-bottom:9px}
+#chIn{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(255,255,255,.05);color:var(--ink);font-size:16px;padding:0 12px;user-select:text}
+#chIn:focus{outline:2px solid var(--green);outline-offset:1px}
+#chIn.ok{border-color:var(--green)}
 .hold-note{font-size:12px;color:var(--amber);text-align:center;min-height:16px}
 
 .actions{display:flex;flex-direction:column;gap:9px;margin-top:2px}
@@ -128,8 +140,14 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
     <div id="brokeMsg">Not enough PTS for this entry. Earn points with Timers, Hard Lock or a Study Room first.</div>
   </div>
 
+  <div class="card" id="chCard" style="display:none">
+    <h3>One more step</h3>
+    <div id="chQ"></div>
+    <input id="chIn" autocomplete="off" autocapitalize="off" spellcheck="false" aria-labelledby="chQ">
+  </div>
+
   <div class="ringzone">
-    <div class="rw">
+    <div class="rw breathe" aria-hidden="true">
       <svg viewBox="0 0 120 120">
         <defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="#2fe38f"/><stop offset="100%" stop-color="#37b6ff"/>
@@ -139,7 +157,7 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
       </svg>
       <div class="rnum" id="rnum">8</div>
     </div>
-    <div class="rsub" id="rsub">Breathe. The gate opens when the ring closes.</div>
+    <div class="rsub" id="rsub" aria-live="polite">Breathe in…</div>
     <div class="hold-note" id="holdNote"></div>
   </div>
 
@@ -164,7 +182,7 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
 
   /* dev fallback so the page can be previewed in a desktop browser */
   var st = { app:'Instagram', usageMin:23, opensToday:1, toll:15, tier:2,
-             dwellSec:8, points:120, pendingRegret:null, verdicts:[] };
+             dwellSec:8, points:120, pendingRegret:null, verdicts:[], limitMin:30, labelMin:23 };
   if(B){
     try{ st = JSON.parse(B.getState()); }catch(e){ /* keep fallback */ }
   }
@@ -173,7 +191,8 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
 
   $('appName').textContent = st.app || 'this app';
   $('usageLine').innerHTML = (st.usageMin>0 ? 'You\u2019ve already spent <b>'+st.usageMin+' min</b> here today · ' : '')
-                           + (st.opensToday>0 ? 'open #'+(st.opensToday+1)+' today' : 'first open today');
+                           + (st.opensToday>0 ? 'open #'+(st.opensToday+1)+' today' : 'first open today')
+                           + (st.limitMin>0 ? '<br><b>'+st.labelMin+' of '+st.limitMin+' min</b> daily limit used' : '');
 
   /* ── regret receipt ── */
   if(st.pendingRegret && st.pendingRegret.app){
@@ -216,6 +235,26 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
   chipify($('whyChips'),function(c){ why=c.getAttribute('data-why'); refresh(); });
   chipify($('minChips'),function(c){ mins=+c.getAttribute('data-min'); });
 
+  /* ── challenge: from the 2nd open today, a small task before entry ── */
+  var chOk = !(st.opensToday>0);
+  if(!chOk){
+    var chIn=$('chIn'), answer;
+    if(Math.random()<.5){
+      var a=12+Math.floor(Math.random()*38), b=12+Math.floor(Math.random()*38);
+      answer=String(a+b);
+      $('chQ').textContent='What is '+a+' + '+b+'?';
+      chIn.setAttribute('inputmode','numeric');
+    }else{
+      answer=('I choose to open '+(st.app||'this app')).toLowerCase();
+      $('chQ').textContent='Type: “I choose to open '+(st.app||'this app')+'”';
+    }
+    $('chCard').style.display='';
+    chIn.addEventListener('input',function(){
+      chOk = chIn.value.trim().replace(/\s+/g,' ').toLowerCase()===answer;
+      chIn.classList.toggle('ok',chOk); refresh();
+    });
+  }
+
   /* ── adaptive dwell ring (+ peer holds arrive via native callback) ── */
   var dwell=Math.max(3, st.dwellSec|0), left=dwell, doneDwell=false;
   var CIRC=2*Math.PI*52, rfg=$('rfg');
@@ -228,12 +267,14 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
   var tick=setInterval(function(){
     left--;
     if(left<=0){ left=0; doneDwell=true; clearInterval(tick);
+      document.querySelector('.rw').classList.remove('breathe');
       $('rnum').textContent='\u2713';
       rfg.style.strokeDashoffset=0;
       $('rsub').textContent='Gate unlocked \u2014 your call now.';
       refresh(); return;
     }
     paint();
+    $('rsub').textContent = Math.floor((dwell-left)/4)%2 ? 'Breathe out\u2026' : 'Breathe in\u2026';
   },1000);
 
   /* Java can push extra dwell (peer Hold from a Study Room, future use) */
@@ -246,10 +287,11 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--green),var(--blue
   /* ── buttons ── */
   var enter=$('enterBtn');
   function refresh(){
-    var ok = doneDwell && !!why && !broke;
+    var ok = doneDwell && !!why && !broke && chOk;
     enter.disabled=!ok;
     enter.classList.toggle('ready',ok);
     if(doneDwell && !why) $('rsub').textContent='Pick a reason above to continue.';
+    else if(doneDwell && !chOk) $('rsub').textContent='Finish the step above to continue.';
   }
   refresh();
 
