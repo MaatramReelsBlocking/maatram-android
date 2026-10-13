@@ -51,24 +51,28 @@ public class AppBlockerPlugin extends Plugin {
         long until = getLongArg(call, "until");
         if (until <= 0) { call.reject("until (epoch ms, as a string) required"); return; }
         boolean wa = Boolean.TRUE.equals(call.getBoolean("whatsappAllowed", false));
+        SharedPreferences p = prefs();
 
-        prefs().edit()
-            .putLong(AppBlockerService.KEY_LOCK_END, until)
-            .putBoolean(AppBlockerService.KEY_WA_ALLOWED, wa)
-            .commit();   // commit, not apply - the service may read it immediately
+        // A running lock can only be extended, never shortened (the page re-arms on every open).
+        long left = Math.max(until - System.currentTimeMillis(), AppBlockerService.lockLeftMs(getContext(), p));
+        AppBlockerService.setLockLeft(getContext(), p, left);
+        p.edit().putBoolean(AppBlockerService.KEY_WA_ALLOWED, wa).commit();
 
+        long msLeft = AppBlockerService.lockLeftMs(getContext(), p);
         JSObject out = new JSObject();
-        out.put("until", String.valueOf(until));
-        out.put("msLeft", String.valueOf(until - System.currentTimeMillis()));
+        out.put("until", String.valueOf(System.currentTimeMillis() + msLeft));
+        out.put("msLeft", String.valueOf(msLeft));
         call.resolve(out);
     }
 
     @PluginMethod
     public void clearLock(PluginCall call) {
-        prefs().edit()
-            .putLong(AppBlockerService.KEY_LOCK_END, 0L)
-            .putBoolean(AppBlockerService.KEY_WA_ALLOWED, false)
-            .commit();
+        // Hard lock: no early exit. The page's own timer follows the phone's clock,
+        // which can be changed, so only clear once the native countdown is done too.
+        SharedPreferences p = prefs();
+        if (AppBlockerService.lockLeftMs(getContext(), p) > 5000L) { call.reject("lock still running"); return; }
+        AppBlockerService.setLockLeft(getContext(), p, 0L);
+        p.edit().putBoolean(AppBlockerService.KEY_WA_ALLOWED, false).commit();
         call.resolve();
     }
 
@@ -105,13 +109,13 @@ public class AppBlockerPlugin extends Plugin {
     @PluginMethod
     public void getStatus(PluginCall call) {
         SharedPreferences p = prefs();
-        long end = p.getLong(AppBlockerService.KEY_LOCK_END, 0L);
+        long left = AppBlockerService.lockLeftMs(getContext(), p);
         JSObject out = new JSObject();
         out.put("enabled", serviceEnabled());
         out.put("serviceRunning", AppBlockerService.isRunning());
-        out.put("lockEnd", String.valueOf(end));
-        out.put("locked", end > System.currentTimeMillis());
-        out.put("secondsLeft", String.valueOf(Math.max(0, (end - System.currentTimeMillis()) / 1000)));
+        out.put("lockEnd", String.valueOf(left > 0 ? System.currentTimeMillis() + left : 0L));
+        out.put("locked", left > 0);
+        out.put("secondsLeft", String.valueOf(left / 1000));
         out.put("whatsappAllowed", p.getBoolean(AppBlockerService.KEY_WA_ALLOWED, false));
         out.put("lastBlocked", AppBlockerService.lastBlocked);
         call.resolve(out);
