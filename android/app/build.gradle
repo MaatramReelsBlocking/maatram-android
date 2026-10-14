@@ -32,7 +32,7 @@ android {
     buildTypes {
         release {
             // Release, not debug: a debuggable build turns WebView debugging back on.
-            signingConfig (ks != null && ks.exists()) ? signingConfigs.maatram : signingConfigs.debug
+            signingConfig = (ks != null && ks.exists()) ? signingConfigs.maatram : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
