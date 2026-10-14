@@ -9,11 +9,14 @@ import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -47,6 +50,10 @@ public class AppBlockerService extends AccessibilityService {
 
     public static final String PREFS = "MaatramBlocker";
     public static final String KEY_LOCK_END = "lock_end";          // epoch ms
+    private static final String KEY_LOCK_END_RT = "lock_end_rt";   // end on the uptime clock
+    private static final String KEY_LOCK_BOOT = "lock_boot";       // boot the uptime end belongs to
+    private static final String KEY_LOCK_LEFT = "lock_left";       // ms left at the last checkpoint
+    private static final long MAX_LOCK_MS = 91 * 60000L;           // longest chip is 90 min
     public static final String KEY_WA_ALLOWED = "wa_allowed";      // boolean
     public static final String KEY_FRICTION_ON = "friction_on";    // boolean, default true
     public static final String KEY_POINTS_CACHE = "points_cache";  // long, last known PTS
@@ -110,6 +117,65 @@ public class AppBlockerService extends AccessibilityService {
     public static String labelFor(String pkg) {
         String n = NAMES.get(pkg);
         return n != null ? n : pkg;
+    }
+
+    /* ============== lock clock ==============
+       The lock runs on the uptime clock, so changing the date/time in Settings
+       can't end it. After a reboot it resumes from the last checkpoint (time
+       the phone is off doesn't count), so "clock forward + restart" can't
+       either. */
+
+    private static int boot(android.content.Context c) {
+        return Settings.Global.getInt(c.getContentResolver(), Settings.Global.BOOT_COUNT, -1);
+    }
+
+    /** Locks for leftMs from now (or ends the lock when leftMs <= 0). */
+    public static void setLockLeft(android.content.Context c, SharedPreferences p, long leftMs) {
+        long left = Math.max(0L, Math.min(leftMs, MAX_LOCK_MS));
+        p.edit().putLong(KEY_LOCK_END, left > 0 ? System.currentTimeMillis() + left : 0L)
+                .putLong(KEY_LOCK_END_RT, SystemClock.elapsedRealtime() + left)
+                .putInt(KEY_LOCK_BOOT, boot(c))
+                .putLong(KEY_LOCK_LEFT, left)
+                .commit();   // commit, not apply - the service may read it immediately
+    }
+
+    /** ms left in the Hard Lock, 0 when none runs. */
+    public static long lockLeftMs(android.content.Context c, SharedPreferences p) {
+        long end = p.getLong(KEY_LOCK_END, 0L);
+        if (end <= 0L) return 0L;
+        int b = boot(c);
+        long endRt = p.getLong(KEY_LOCK_END_RT, 0L);
+        long ms;
+        if (b >= 0 && endRt > 0L && p.getInt(KEY_LOCK_BOOT, -2) == b) {
+            ms = endRt - SystemClock.elapsedRealtime();
+            // Finished: drop the checkpoint so a later reboot can't revive the lock.
+            if (ms <= 0L && p.getLong(KEY_LOCK_LEFT, 0L) > 0L) p.edit().putLong(KEY_LOCK_LEFT, 0L).commit();
+        } else if (b >= 0 && p.getLong(KEY_LOCK_LEFT, 0L) > 0L) {
+            ms = p.getLong(KEY_LOCK_LEFT, 0L);
+            setLockLeft(c, p, ms);   // first look after a reboot: count down from here
+        } else {
+            ms = end - System.currentTimeMillis();   // lock saved by an older version
+        }
+        return Math.max(0L, Math.min(ms, MAX_LOCK_MS));
+    }
+
+    /** Settings-type apps: while locked, their pages that mention Maatram are bounced
+     *  (Shield toggle, App info / Force stop / Clear storage, uninstall dialog). */
+    private static final String[] GUARDED = {
+        "com.android.settings",
+        "com.android.settings.intelligence",
+        "com.android.packageinstaller",
+        "com.google.android.packageinstaller",
+        "com.miui.packageinstaller",
+        "com.miui.securitycenter",
+        "com.samsung.android.sm",
+        "com.samsung.android.lool",
+        "android"   // volume-key accessibility shortcut picker
+    };
+
+    private static boolean isGuarded(String pkg) {
+        for (String g : GUARDED) if (g.equals(pkg)) return true;
+        return false;
     }
 
     private static boolean isBlocked(String pkg) {
@@ -339,8 +405,10 @@ public class AppBlockerService extends AccessibilityService {
         long now = System.currentTimeMillis();
 
         /* -- 1. HARD LOCK: absolute, unchanged -- */
-        long lockEnd = p.getLong(KEY_LOCK_END, 0L);
-        if (now < lockEnd) {
+        long lockLeft = lockLeftMs(this, p);
+        if (lockLeft > 0) {
+            long lockEnd = now + lockLeft;
+            if (isGuarded(pkg) && type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { guard(pkg); return; }
             boolean block = isBlocked(pkg)
                 || (isWhatsapp(pkg) && !p.getBoolean(KEY_WA_ALLOWED, false));
             if (block) {
@@ -395,6 +463,35 @@ public class AppBlockerService extends AccessibilityService {
     @Override
     public void onInterrupt() { }
 
+    /* ============== Settings guard (Hard Lock only) ============== */
+
+    private String guardPkg = "";
+
+    /** Settings pages fill in a moment after opening, so look now and twice more. */
+    private void guard(String pkg) {
+        guardPkg = pkg;
+        ui.removeCallbacks(guardCheck);
+        guardCheck.run();
+        ui.postDelayed(guardCheck, 400);
+        ui.postDelayed(guardCheck, 1200);
+    }
+
+    private final Runnable guardCheck = new Runnable() {
+        @Override public void run() {
+            if (guardPkg.isEmpty()) return;
+            try {
+                AccessibilityNodeInfo root = getRootInActiveWindow();
+                if (root == null || root.getPackageName() == null
+                    || !guardPkg.equals(root.getPackageName().toString())) return;
+                if (!root.findAccessibilityNodeInfosByText("Maatram").isEmpty()) {
+                    guardPkg = "";   // pending re-checks become no-ops
+                    bounceHome();
+                    toast("Hard Lock active - Maatram settings are locked until it ends");
+                }
+            } catch (Exception ignored) { /* window gone; nothing to guard */ }
+        }
+    };
+
     /* ============== usage tracking + timed sessions + reminders ============== */
 
     private void trackForeground(String pkg) {
@@ -415,6 +512,10 @@ public class AppBlockerService extends AccessibilityService {
     private void tick() {
         SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
         long now = System.currentTimeMillis();
+
+        /* save the lock's time left, so a reboot resumes from here */
+        long left = lockLeftMs(this, p);
+        if (left > 0) p.edit().putLong(KEY_LOCK_LEFT, left).apply();
 
         /* live usage for the app currently in front (only while screen is on) */
         boolean screenOn = true;
