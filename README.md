@@ -13,6 +13,6 @@ No Mac needed: `.github/workflows/ios.yml` builds on a GitHub macOS machine.
 4. Drag the `.ipa` into Sideloadly, enter your Apple ID, press Start. Then Settings → General → VPN & Device Management → trust your Apple ID.
 5. A free Apple ID signature lasts 7 days, so repeat step 4 weekly. A paid Apple Developer account lasts a year.
 
-**Signed build in CI (optional, needs the paid Apple Developer Program).** Add repo secrets `IOS_CERT_P12_BASE64`, `IOS_CERT_PASSWORD`, `IOS_PROFILE_BASE64`, `APPLE_TEAM_ID`, `KEYCHAIN_PASSWORD`; the workflow then also uploads `Maatram-signed.ipa`.
+**Signed build with Hard Lock (needs the paid Apple Developer Program).** Hard Lock uses Screen Time (Family Controls), so the app has two extensions and needs a properly signed build; Sideloadly re-signing removes the entitlement. Follow `IOS-SIGNING.md`.
 
-**Not on iOS.** Hard Lock / Shield / friction gate. They are Android-only (Accessibility service); iOS has no equivalent without Apple's Family Controls entitlement, see `IOS-NOTES.md`.
+**Not on iOS.** The friction gate (it intercepts app opens) has no iOS equivalent. Hard Lock/Shield use Screen Time instead, see `IOS-NOTES.md`.
