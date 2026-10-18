@@ -1280,7 +1280,26 @@ if(!reduced) requestAnimationFrame(frame); else frame(0);
     }, fail('getStatus'));
   }
 
+  var IOS = C.getPlatform && C.getPlatform() === 'ios';
+  if(IOS){
+    var rs=document.getElementById('shieldRestricted'); if(rs) rs.style.display='none';
+    sMsg.textContent='Hard Lock on iPhone uses Apple Screen Time. Allow access, then pick the apps to lock. They will not open while a lock is running.';
+    sBtn.textContent='Allow Screen Time';
+    var pick=document.createElement('button');
+    pick.style.cssText='margin:10px 0 0 8px;font-size:11px;font-weight:700;letter-spacing:.6px;padding:9px 16px;min-height:40px;border-radius:100px;cursor:pointer;border:1px solid rgba(55,182,255,.4);color:#37b6ff;background:rgba(55,182,255,.07)';
+    pick.textContent='Choose apps to lock';
+    sBtn.parentNode.appendChild(pick);
+    var pickA=pick.cloneNode(false); pickA.textContent='Choose apps to keep open';
+    sBtn.parentNode.appendChild(pickA);
+    pickA.addEventListener('click', function(){
+      AB.requestAuthorization().then(function(){ return AB.pickApps({kind:'allow'}); }).then(status, fail('pickApps'));
+    });
+    pick.addEventListener('click', function(){
+      AB.requestAuthorization().then(function(){ return AB.pickApps({kind:'block'}); }).then(status, fail('pickApps'));
+    });
+  }
   sBtn.addEventListener('click', function(){
+    if(IOS){ AB.requestAuthorization().then(status, fail('requestAuthorization')); return; }
     sMsg.textContent = 'In Settings: Installed apps / Downloaded apps → Maatram Shield → turn it ON, then come back here. If Android shows "Restricted setting", first do: Settings → Apps → Maatram → ⋮ (top-right) → Allow restricted settings.';
     AB.openSettings().catch(fail('openSettings'));
   });
@@ -1302,7 +1321,7 @@ if(!reduced) requestAnimationFrame(frame); else frame(0);
     waOn = false;
     arm(endTs, false);
     waBtn.style.display = '';
-    waBtn.textContent = 'Unlock WhatsApp only';
+    waBtn.textContent = IOS ? 'Unlock allowed apps' : 'Unlock WhatsApp only';
     waBtn.style.borderColor = 'rgba(47,227,143,.4)';
     waBtn.style.color = '#2fe38f';
     _engage(endTs, totalSec);
@@ -1317,7 +1336,7 @@ if(!reduced) requestAnimationFrame(frame); else frame(0);
   waBtn.addEventListener('click', function(){
     waOn = !waOn;
     AB.setWhatsappAllowed({ allowed:waOn }).then(status, fail('setWhatsappAllowed'));
-    waBtn.textContent = waOn ? 'WhatsApp unlocked · tap to re-lock' : 'Unlock WhatsApp only';
+    waBtn.textContent = waOn ? (IOS?'Allowed apps open · tap to re-lock':'WhatsApp unlocked · tap to re-lock') : (IOS?'Unlock allowed apps':'Unlock WhatsApp only');
     waBtn.style.borderColor = waOn ? 'rgba(255,93,115,.4)' : 'rgba(47,227,143,.4)';
     waBtn.style.color = waOn ? '#ff5d73' : '#2fe38f';
   });

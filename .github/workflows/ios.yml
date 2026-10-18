@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Add Screen Time extension targets to the Xcode project
+        run: cd ios/App && ruby ../scripts/add_extensions.rb
+
       - name: Install and sync (also runs pod install)
         run: |
           npm install --no-audit --no-fund
@@ -41,8 +44,8 @@ jobs:
 
       # ── Optional: development-signed build. Needs a paid Apple Developer account. ──
       # Secrets: IOS_CERT_P12_BASE64 (Apple Development cert + key), IOS_CERT_PASSWORD,
-      # IOS_PROFILE_BASE64 (iOS App Development profile for com.maatram.app that lists
-      # your iPhone's UDID), APPLE_TEAM_ID, KEYCHAIN_PASSWORD (any random string).
+      # IOS_PROFILE_APP_BASE64 / IOS_PROFILE_MONITOR_BASE64 / IOS_PROFILE_SHIELD_BASE64 (iOS App
+      # Development profiles for com.maatram.app / .monitor / .shield, each listing your iPhone's UDID), APPLE_TEAM_ID, KEYCHAIN_PASSWORD (any random string).
       - name: Are signing secrets set?
         id: sign
         env:
@@ -54,24 +57,31 @@ jobs:
         env:
           P12: ${{ secrets.IOS_CERT_P12_BASE64 }}
           P12_PASS: ${{ secrets.IOS_CERT_PASSWORD }}
-          PROFILE: ${{ secrets.IOS_PROFILE_BASE64 }}
+          PROF_APP: ${{ secrets.IOS_PROFILE_APP_BASE64 }}
+          PROF_MON: ${{ secrets.IOS_PROFILE_MONITOR_BASE64 }}
+          PROF_SHD: ${{ secrets.IOS_PROFILE_SHIELD_BASE64 }}
           TEAM: ${{ secrets.APPLE_TEAM_ID }}
           KC_PASS: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           KC="$RUNNER_TEMP/ci.keychain-db"
           echo "$P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
-          echo "$PROFILE" | base64 -d > "$RUNNER_TEMP/app.mobileprovision"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           security create-keychain -p "$KC_PASS" "$KC"
           security set-keychain-settings -lut 3600 "$KC"
           security unlock-keychain -p "$KC_PASS" "$KC"
           security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASS" -A -t cert -f pkcs12 -k "$KC"
           security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC"
           security list-keychains -d user -s "$KC" login.keychain
-          security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/p.plist"
-          UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/p.plist")
-          NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/p.plist")
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$RUNNER_TEMP/app.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          prof() { # $1=base64 $2=bundle id -> prints profile name
+            echo "$1" | base64 -d > "$RUNNER_TEMP/$2.mobileprovision"
+            security cms -D -i "$RUNNER_TEMP/$2.mobileprovision" > "$RUNNER_TEMP/$2.plist"
+            local u; u=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/$2.plist")
+            cp "$RUNNER_TEMP/$2.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/$u.mobileprovision
+            /usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/$2.plist"
+          }
+          N_APP=$(prof "$PROF_APP" com.maatram.app)
+          N_MON=$(prof "$PROF_MON" com.maatram.app.monitor)
+          N_SHD=$(prof "$PROF_SHD" com.maatram.app.shield)
           cat > "$RUNNER_TEMP/export.plist" <<PL
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -79,19 +89,25 @@ jobs:
             <key>method</key><string>development</string>
             <key>teamID</key><string>$TEAM</string>
             <key>signingStyle</key><string>manual</string>
-            <key>provisioningProfiles</key><dict><key>com.maatram.app</key><string>$NAME</string></dict>
+            <key>provisioningProfiles</key><dict>
+              <key>com.maatram.app</key><string>$N_APP</string>
+              <key>com.maatram.app.monitor</key><string>$N_MON</string>
+              <key>com.maatram.app.shield</key><string>$N_SHD</string>
+            </dict>
           </dict></plist>
           PL
+          (cd ios/App && TEAM="$TEAM" PROFILE_APP="$N_APP" PROFILE_MONITOR="$N_MON" PROFILE_SHIELD="$N_SHD" ruby ../scripts/add_extensions.rb)
           xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
-            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_IDENTITY="Apple Development" \
-            PROVISIONING_PROFILE_SPECIFIER="$NAME"
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" archive
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/out"
           cp "$RUNNER_TEMP/out/App.ipa" Maatram-signed.ipa
+          ./ios/scripts/verify_ipa.sh Maatram-signed.ipa | tee signing-report.txt
 
       - uses: actions/upload-artifact@v4
         if: hashFiles('Maatram-signed.ipa') != ''
         with:
           name: maatram-ios-signed
-          path: Maatram-signed.ipa
+          path: |
+            Maatram-signed.ipa
+            signing-report.txt
