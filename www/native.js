@@ -4,13 +4,15 @@
   var C = window.Capacitor;
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return;
 
-  document.documentElement.classList.add('native');
+  var PLAT = C.getPlatform ? C.getPlatform() : 'android';
+  var IOS = PLAT === 'ios';
+  document.documentElement.classList.add('native', PLAT);
   var P = C.Plugins || {};
 
   /* ── status bar: transparent, light icons ── */
   try {
     if (P.StatusBar) {
-      P.StatusBar.setOverlaysWebView({ overlay: true });
+      if (!IOS) P.StatusBar.setOverlaysWebView({ overlay: true });   // iOS always draws under it
       P.StatusBar.setStyle({ style: 'DARK' });   // DARK style = light icons
     }
   } catch (e) {}
@@ -167,6 +169,19 @@
       tries++;
       if (tries > 150 || await mtConsume()) clearInterval(iv);
     }, 1200);
+  }
+
+  /* iOS: no native plugin. Safari hands back maatram://auth?idt=...; read it
+     straight from the URL the app was opened with (running or cold start). */
+  function mtFromUrl(u) {
+    try {
+      var idt = new URL(u).searchParams.get('idt');
+      if (idt && idt.length >= 20) mtSignInWithIdToken(idt);
+    } catch (e) {}
+  }
+  if (IOS && P.App) {
+    P.App.addListener('appUrlOpen', function (ev) { if (ev && ev.url) mtFromUrl(ev.url); });
+    try { P.App.getLaunchUrl().then(function (r) { if (r && r.url) mtFromUrl(r.url); }); } catch (e) {}
   }
 
   window.MaatramAuth = {

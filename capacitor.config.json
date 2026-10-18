@@ -17,7 +17,7 @@
       "showSpinner": false
     },
     "Keyboard": {
-      "resize": "none",
+      "resize": "native",
       "style": "dark",
       "resizeOnFullScreen": true
     },
@@ -26,5 +26,9 @@
       "backgroundColor": "#06090B",
       "overlaysWebView": true
     }
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#06090B"
   }
 }
