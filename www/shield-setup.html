@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Set up Maatram Shield on Android — Maatram</title>
+<meta name="description" content="Step-by-step guide to turn on Maatram Shield, the Android accessibility permission that makes blocking work, with fixes for Android 13+ and common phone brands.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://maatram.co.in/shield-setup.html">
+<link rel="icon" href="favicon.ico">
+<style>
+  :root{--bg:#070d0f;--card:#0d1417;--ink:#e6f0ed;--dim:#a9bcb8;--green:#2fe38f;--blue:#38b6ff;--warn:#ffd166;--line:rgba(255,255,255,.1)}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:clip}
+  main{max-width:720px;margin:0 auto;padding:28px 16px 64px}
+  a{color:var(--green)}
+  h1{font-size:clamp(24px,5vw,34px);line-height:1.2;margin:0 0 10px}
+  h2{font-size:20px;margin:32px 0 10px;color:#fff}
+  p{margin:0 0 12px;color:var(--dim)}
+  .eyebrow{font-weight:800;letter-spacing:.14em;font-size:13px;background:linear-gradient(90deg,var(--green),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+  ol{padding-left:0;list-style:none;counter-reset:s;margin:0}
+  ol li{counter-increment:s;position:relative;padding:14px 14px 14px 56px;margin:0 0 10px;background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--ink)}
+  ol li::before{content:counter(s);position:absolute;left:14px;top:14px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(90deg,var(--green),var(--blue));color:#04120f;font-weight:800;font-size:14px}
+  ol li small{display:block;color:var(--dim);margin-top:4px}
+  .fix{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 10px}
+  .fix b{display:block;color:#fff;margin-bottom:4px}
+  .fix p{margin:0}
+  .note{border:1px solid rgba(255,209,102,.35);background:rgba(255,209,102,.08);color:#ffe2a0;border-radius:14px;padding:14px 16px;margin:16px 0}
+  .cta{display:inline-flex;align-items:center;min-height:48px;padding:0 22px;border-radius:999px;font-weight:700;text-decoration:none;color:#04120f;background:linear-gradient(90deg,var(--green),var(--blue));margin:8px 10px 0 0}
+  .cta.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">MAATRAM SHIELD</div>
+  <h1>Set up Maatram Shield on Android</h1>
+  <p>Shield is the permission that lets Maatram pause the apps you choose during a Hard Lock. Without it, the lock still runs, but it cannot stop an app from opening. This guide takes about 3 minutes.</p>
+
+  <div class="note"><b>Blocking is only confirmed inside the Android app.</b> A website cannot check whether Shield is working. Open Maatram on your phone and look at the Shield status there. If it says it is not running, blocking is not active, whatever the timer shows.</div>
+
+  <h2>Before you start</h2>
+  <p>You need an Android phone with the Maatram app installed, and about 3 minutes. You will leave the app to open Android Settings and come back.</p>
+
+  <h2>Turn Shield on</h2>
+  <ol>
+    <li>Open <b>Maatram</b> and go to <b>App Gate</b>. In the Shield card, tap <b>Enable Shield</b>.<small>If the button says the setting is blocked, go to step 2.</small></li>
+    <li>On Android 13 and later, the Accessibility switch is greyed out for apps installed outside the Play Store. Open <b>Settings → Apps → Maatram</b>, tap the <b>⋮</b> menu at the top right, and choose <b>Allow restricted settings</b>. Confirm with your PIN or fingerprint.<small>The menu is only there after the app has been installed for a moment. If it is missing, close Settings and try again.</small></li>
+    <li>Go back to <b>Settings → Accessibility</b> (or the Shield card, which opens it for you). Find <b>Maatram Shield</b> and switch it on. Accept the warning. It says the service can read screen content. Maatram uses that only to pause blocked apps during a Hard Lock. It does not send screen content anywhere.</li>
+    <li>Return to Maatram. The Shield card should now say <b>Shield is on and running</b>. If it still says it is off, see the fixes below.</li>
+  </ol>
+
+  <h2>Check that it is working</h2>
+  <ol>
+    <li>Start a short Hard Lock (5 minutes) with at least one app selected, such as YouTube.</li>
+    <li>Open that app. It should be sent back to the home screen straight away.</li>
+    <li>Stop the Hard Lock, then open the app again to confirm it works normally.</li>
+  </ol>
+  <p>If the app still opens during a Hard Lock, follow the fixes below, then <a href="https://github.com/MaatramReelsBlocking/maatram/issues/new?template=blocking_broken.yml">report it with the blocking issue form</a>.</p>
+
+  <h2>Fixes when setup fails</h2>
+  <div class="fix"><b>"Restricted setting" and the switch is greyed out</b><p>Use <b>Settings → Apps → Maatram → ⋮ → Allow restricted settings</b>, then enable Maatram Shield. This is an Android 13+ safety rule for apps not from the Play Store. Maatram cannot skip it.</p></div>
+  <div class="fix"><b>Shield turns off after you close the app or restart the phone</b><p>Set Maatram's battery use to <b>Unrestricted</b> (Settings → Apps → Maatram → Battery). Then open the recent apps view and lock Maatram there (usually by pressing its card, then choosing Lock or Keep open).</p></div>
+  <div class="fix"><b>Samsung phones</b><p>Remove Maatram from <b>Sleeping apps</b> and <b>Deep sleeping apps</b> (Settings → Battery → Background usage limits). Then set Battery to Unrestricted, as above.</p></div>
+  <div class="fix"><b>Oppo, Realme, Vivo, Xiaomi</b><p>Allow <b>Auto-start</b> for Maatram in the phone's security or app manager, and allow background activity. Each brand puts this in a different menu, so search the settings for "auto-start".</p></div>
+  <div class="fix"><b>Google Pay or banking apps stop working</b><p>Some payment apps refuse to run on phones with Maatram installed, even with Shield off. We are still investigating this. Please report it with your phone model and Android version using the blocking issue form.</p></div>
+  <div class="fix"><b>Blocking still does not work after all of the above</b><p>Make sure a Hard Lock is running and the app is selected. Note the Maatram version and the app's version (Settings → Apps), then send them with your phone model using the blocking issue form.</p></div>
+
+  <h2>Turn it off</h2>
+  <p>You can switch Shield off at any time in Settings → Accessibility → Maatram Shield. Blocking stops until you turn it on again. Your points and history stay as they are.</p>
+
+  <p style="margin-top:28px">
+    <a class="cta" href="timers.html?tour=1">Replay the welcome tour</a>
+    <a class="cta ghost" href="app-gate.html">Back to App Gate</a>
+  </p>
+</main>
+</body>
+</html>
